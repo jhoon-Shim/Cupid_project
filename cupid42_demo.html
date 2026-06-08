@@ -87,7 +87,7 @@
   @keyframes tpulse{50%{box-shadow:0 0 30px var(--glow);}}
   .map .bot{position:absolute;width:26px;height:26px;border-radius:50%;transform:translate(-50%,-50%);
     background:radial-gradient(circle at 35% 30%,var(--mint),#1f7a5e);box-shadow:0 0 16px rgba(122,240,200,.6);
-    transition:left 4s cubic-bezier(.4,.05,.3,1),top 4s cubic-bezier(.4,.05,.3,1);z-index:3;}
+    transition:left 0.9s ease,top 0.9s ease;z-index:3;}
   .map .bot::after{content:"🤖";position:absolute;inset:0;display:grid;place-items:center;font-size:14px;}
   .map svg{position:absolute;inset:0;width:100%;height:100%;z-index:1;}
   .map .trail{stroke:var(--pink);stroke-width:2;stroke-dasharray:5 6;fill:none;opacity:.5;}
@@ -213,12 +213,9 @@
       </div>
     </div>
 
-    <!-- ▼▼▼ 테스트용 블록 — 실제 배포 시 이 div 통째로 삭제하면 됩니다 ▼▼▼ -->
     <div class="testbox" id="testbox">
-      <span>// TEST · 실제로는 ROS2 도착 신호로 전환됩니다</span>
       <button id="forceArrive">▶ 도착시키기</button>
     </div>
-    <!-- ▲▲▲ 테스트용 블록 끝 ▲▲▲ -->
   </section>
 
   <!-- STEP 3 -->
@@ -264,7 +261,9 @@ const BGMS = {
    ========================================================================= */
 let current = {seat:null, msg:"", bgm:null};
 let audio = null, typing=false;
-let _initDist = null;  // 첫 nav_feedback 시 기준 거리
+let _initEta = null;   // 첫 feedback의 ETA (진행바 기준)
+let _smoothEta = null; // EMA 스무딩된 ETA
+let _cdTimer = null;   // 1초 카운트다운 타이머
 
 /* 작성 화면 채우기 */
 const seatSel=document.getElementById('seat');
@@ -286,7 +285,8 @@ document.getElementById('send').onclick=()=>{
   const bgmKey=bgmSel.value;
   current={seat,msg:text,bgm:BGMS[bgmKey]};
 
-  _initDist = null;
+  _initEta = null; _smoothEta = null;
+  clearInterval(_cdTimer);
   goStep(2);
   document.getElementById('dseat').textContent=`#${seat} ${SEATS[seat].label}`;
   document.getElementById('bgmNow').textContent=current.bgm.title;
@@ -304,7 +304,7 @@ document.getElementById('send').onclick=()=>{
   runDeliveryAnim(seat);
 };
 
-/* 배달 애니메이션 — 미니맵 봇 이동 표시. 진행바/ETA는 nav_feedback으로 실시간 업데이트 */
+/* 배달 애니메이션 — 봇 위치는 ETA 카운트다운과 동기화 */
 function runDeliveryAnim(seat){
   const map=document.getElementById('map');
   map.querySelectorAll('.seatdot,.bot').forEach(e=>e.remove());
@@ -313,12 +313,19 @@ function runDeliveryAnim(seat){
     d.style.left=(s.mx*100)+'%';d.style.top=(s.my*100)+'%';d.textContent='#'+n;map.append(d);
   });
   const bot=document.createElement('div');bot.className='bot';
-  bot.style.left=(BOT_HOME.mx*100)+'%';bot.style.top=(BOT_HOME.my*100)+'%';map.append(bot);
+  bot.style.left=(BOT_HOME.mx*100)+'%';bot.style.top=(BOT_HOME.my*100)+'%';
+  map.append(bot);
   const t=SEATS[seat];const tr=document.getElementById('trail');
   tr.setAttribute('d',`M ${BOT_HOME.mx*560} ${BOT_HOME.my*300} L ${t.mx*560} ${t.my*300}`);
-  requestAnimationFrame(()=>{requestAnimationFrame(()=>{
-    bot.style.left=(t.mx*100)+'%';bot.style.top=(t.my*100)+'%';
-  });});
+  // 봇 위치는 ETA 카운트다운 타이머에서 업데이트
+}
+
+function updateBotPos(pct){
+  const bot=document.querySelector('.map .bot');
+  if(!bot||!current.seat)return;
+  const t=SEATS[current.seat];
+  bot.style.left=((BOT_HOME.mx+(t.mx-BOT_HOME.mx)*pct)*100)+'%';
+  bot.style.top=((BOT_HOME.my+(t.my-BOT_HOME.my)*pct)*100)+'%';
 }
 
 /* =========================================================================
@@ -326,6 +333,8 @@ function runDeliveryAnim(seat){
    ========================================================================= */
 async function arrive(){
   if(typing)return;
+  clearInterval(_cdTimer);
+  document.getElementById('bar').style.width='100%';
   goStep(3);
   document.getElementById('ts').textContent=stamp();
   document.getElementById('barpath').textContent=`~/cluster/seat_${current.seat} — delivered by turtlebot`;
@@ -373,15 +382,18 @@ function burstHearts(){
     h.style.animationDuration=(2.4+Math.random()*1.8)+'s';m.append(h);setTimeout(()=>h.remove(),4800);}
 }
 
+document.getElementById('forceArrive').onclick=()=>{ arrive(); };
+
 /* 처음으로 */
 document.getElementById('again').onclick=()=>{
-  stopBGM();goStep(1);document.getElementById('message').innerHTML='';
+  stopBGM();
+  clearInterval(_cdTimer);
+  _initEta=null; _smoothEta=null;
+  goStep(1);
+  document.getElementById('message').innerHTML='';
   document.getElementById('msg').value='';
 };
 
-/* ▼▼▼ 테스트용 — 실제 배포 시 이 줄 삭제 ▼▼▼ */
-document.getElementById('forceArrive').onclick=()=>{flashLog('[TEST] 강제 도착');arrive();};
-/* ▲▲▲ 테스트용 끝 ▲▲▲ */
 
 /* =========================================================================
    [6] 실제 ROS2 연동 — 노드가 {"type":"arrived"} 보내면 자동으로 STEP3 전환
@@ -399,11 +411,23 @@ function connect(){
       if(d.type==='arrived'){
         arrive();
       } else if(d.type==='nav_feedback'){
-        // 실제 ETA + 진행바 업데이트
-        if(_initDist===null) _initDist=d.distance_remaining;
-        const pct=_initDist>0?Math.min((1-d.distance_remaining/_initDist)*100,98):0;
-        document.getElementById('bar').style.width=pct+'%';
-        document.getElementById('etaVal').textContent=d.eta_sec>=0?d.eta_sec:'--';
+        const newEta = d.eta_sec >= 0 ? d.eta_sec : 0;
+        if(_smoothEta === null){
+          // 첫 feedback: 기준값 설정 + 카운트다운 시작
+          _smoothEta = newEta;
+          _initEta = newEta;
+          clearInterval(_cdTimer);
+          _cdTimer = setInterval(()=>{
+            if(_smoothEta > 0){ _smoothEta = Math.max(0, _smoothEta - 1); }
+            const ratio = _initEta > 0 ? Math.min(1 - _smoothEta/_initEta, 0.98) : 0;
+            document.getElementById('etaVal').textContent = Math.round(_smoothEta);
+            document.getElementById('bar').style.width = (ratio*100)+'%';
+            updateBotPos(ratio);
+          }, 1000);
+        } else {
+          // 이후 feedback: EMA로 부드럽게 보정 (Nav2값과 카운트다운값 혼합)
+          _smoothEta = _smoothEta * 0.7 + newEta * 0.3;
+        }
         document.getElementById('distVal').textContent=`(${d.distance_remaining}m)`;
       } else if(d.type==='camera'){
         const img=document.getElementById('camFeed');

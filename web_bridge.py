@@ -22,10 +22,18 @@ except ImportError:
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from nav2_msgs.action import NavigateToPose
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import Image
 import websockets
+
+# 카메라 센서는 BEST_EFFORT QoS 사용 (기본 RELIABLE로 구독하면 프레임 못 받음)
+CAM_QOS = QoSProfile(
+    reliability=QoSReliabilityPolicy.BEST_EFFORT,
+    history=QoSHistoryPolicy.KEEP_LAST,
+    depth=1,
+)
 
 SOFAS = {
     1: {'x': 8.466938655420897,  'y': 1.0469112458221683,  'oz': -0.11496345474109766, 'ow': 0.9933697217421072},
@@ -41,13 +49,23 @@ _loop = None
 
 
 class CupidBridgeNode(Node):
+    # TurtleBot3 모델별 카메라 토픽 후보
+    CAM_TOPICS = [
+        '/camera/image_raw',          # waffle_pi (raspicam)
+        '/raspicam_node/image_raw',   # 일부 waffle_pi
+        '/camera/rgb/image_raw',      # waffle (RealSense)
+        '/image_raw',
+    ]
+
     def __init__(self):
         super().__init__('cupid_bridge')
         self._client = ActionClient(self, NavigateToPose, '/navigate_to_pose')
         self._last_cam_t = 0.0
+        self._cam_active = False
         if _CV2_OK:
-            self._cam_sub = self.create_subscription(
-                Image, '/camera/image_raw', self._on_image, 10)
+            for topic in self.CAM_TOPICS:
+                self.create_subscription(Image, topic, self._on_image, CAM_QOS)
+                self.get_logger().info(f'Subscribing camera (BEST_EFFORT): {topic}')
         self.get_logger().info('Cupid bridge node started')
 
     def _on_image(self, msg):
@@ -55,13 +73,21 @@ class CupidBridgeNode(Node):
         if now - self._last_cam_t < 0.1:   # 10 fps cap
             return
         self._last_cam_t = now
+        if not self._cam_active:
+            self._cam_active = True
+            self.get_logger().info(f'Camera frame received! encoding={msg.encoding} size={msg.width}x{msg.height}')
         try:
-            if msg.encoding == 'rgb8':
-                arr = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, 3)
-                arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
-            elif msg.encoding == 'bgr8':
-                arr = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, 3)
+            enc = msg.encoding.lower()
+            arr = np.frombuffer(msg.data, dtype=np.uint8)
+            if enc in ('rgb8', 'bgr8', 'mono8'):
+                ch = 1 if enc == 'mono8' else 3
+                arr = arr.reshape(msg.height, msg.width, ch)
+                if enc == 'rgb8':
+                    arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+            elif enc in ('16uc1', '32fc1'):
+                return  # 깊이 이미지 무시
             else:
+                self.get_logger().warn(f'Unknown encoding: {enc}')
                 return
             _, jpeg = cv2.imencode('.jpg', arr, [cv2.IMWRITE_JPEG_QUALITY, 60])
             b64 = base64.b64encode(jpeg.tobytes()).decode()
@@ -72,14 +98,17 @@ class CupidBridgeNode(Node):
             self.get_logger().warn(f'Camera encode error: {e}')
 
     def navigate(self, seat: int, on_arrive):
+        self.get_logger().info(f'navigate() called → seat={seat}')
         pose = SOFAS.get(seat)
         if not pose:
             self.get_logger().warn(f'Unknown seat: {seat}')
             return
 
-        if not self._client.wait_for_server(timeout_sec=10.0):
-            self.get_logger().error('Nav2 action server not available')
+        self.get_logger().info('Waiting for Nav2 action server...')
+        if not self._client.wait_for_server(timeout_sec=15.0):
+            self.get_logger().error('Nav2 action server NOT available (timeout 15s). Nav2가 실행 중인지 확인하세요.')
             return
+        self.get_logger().info('Nav2 action server OK → sending goal')
 
         goal = NavigateToPose.Goal()
         goal.pose = PoseStamped()
