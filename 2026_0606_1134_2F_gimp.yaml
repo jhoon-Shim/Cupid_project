@@ -1,0 +1,7 @@
+image: /home/jshim/Desktop/workspace/cupid_project/2026_0606_1134_2F_gimp.pgm
+mode: trinary
+resolution: 0.05
+origin: [-3.5, -3.79, 0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.25
