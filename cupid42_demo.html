@@ -139,6 +139,20 @@
   .log{position:absolute;bottom:14px;left:24px;right:24px;font-family:var(--mono);font-size:10px;color:var(--line);
     max-height:42px;overflow:hidden;line-height:1.8;z-index:60;}
   .log span{color:var(--pink-soft);}
+
+  /* ===== 카메라 + ETA ===== */
+  .deliver-row{display:flex;gap:16px;align-items:flex-start;width:min(760px,96%);}
+  .cam-panel{flex:0 0 200px;border:1px solid var(--line);border-radius:12px;overflow:hidden;
+    background:#0a0812;display:flex;flex-direction:column;}
+  .cam-panel .cam-title{font-family:var(--kr);font-size:11px;color:var(--dim);padding:7px 10px;
+    border-bottom:1px solid var(--line);letter-spacing:.08em;}
+  .cam-panel img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:#0a0812;}
+  .cam-panel .cam-no{width:100%;aspect-ratio:4/3;display:grid;place-items:center;
+    font-family:var(--mono);font-size:10px;color:var(--line);}
+  .map-col{flex:1 1 auto;display:flex;flex-direction:column;gap:12px;}
+  .eta-bar{display:flex;align-items:center;gap:10px;font-family:var(--kr);font-size:12px;color:var(--dim);}
+  .eta-bar b{font-family:var(--mono);font-size:16px;color:var(--mint);font-weight:400;min-width:3ch;text-align:right;}
+  .eta-bar .eta-unit{font-size:11px;}
 </style>
 </head>
 <body>
@@ -176,11 +190,28 @@
   <!-- STEP 2 -->
   <section class="screen" id="deliver">
     <div class="head">터틀봇이 <span id="dseat" style="color:var(--mint)"></span> 으로 출발했어요<span class="dots"></span></div>
-    <div class="map" id="map"><svg><path class="trail" id="trail"/></svg></div>
-    <div class="progress"><i id="bar"></i></div>
-    <div class="bgm"><span class="note">🎵</span><span id="bgmNow"></span>
-      <span class="eq"><i></i><i></i><i></i><i></i></span>
-      <span style="color:var(--dim);font-size:11px">(BGM 재생 중…)</span></div>
+    <div class="deliver-row">
+      <!-- 카메라 패널 -->
+      <div class="cam-panel">
+        <div class="cam-title">📷 터틀봇 시점</div>
+        <img id="camFeed" alt="" style="display:none">
+        <div class="cam-no" id="camNo">신호 대기 중…</div>
+      </div>
+      <!-- 맵 + 진행 -->
+      <div class="map-col">
+        <div class="map" id="map"><svg><path class="trail" id="trail"/></svg></div>
+        <div class="progress"><i id="bar"></i></div>
+        <div class="eta-bar">
+          <span>예상 도착까지</span>
+          <b id="etaVal">--</b>
+          <span class="eta-unit">초</span>
+          <span style="color:var(--line);margin-left:4px" id="distVal"></span>
+        </div>
+        <div class="bgm"><span class="note">🎵</span><span id="bgmNow"></span>
+          <span class="eq"><i></i><i></i><i></i><i></i></span>
+          <span style="color:var(--dim);font-size:11px">(BGM 재생 중…)</span></div>
+      </div>
+    </div>
 
     <!-- ▼▼▼ 테스트용 블록 — 실제 배포 시 이 div 통째로 삭제하면 됩니다 ▼▼▼ -->
     <div class="testbox" id="testbox">
@@ -215,20 +246,17 @@
    [1] 좌석 ↔ 좌표  /  맵 표시용 픽셀 위치(0~1 비율)  ← 추후 실측값으로 교체
    ========================================================================= */
 const SEATS = {
-  1:{x:1.50,y:0.80, label:"C1 · 창가 1열", mx:0.20,my:0.25},
-  2:{x:2.30,y:-0.40,label:"C2 · 창가 2열", mx:0.50,my:0.20},
-  3:{x:0.60,y:1.70, label:"C3 · 중앙 1열", mx:0.78,my:0.30},
-  4:{x:-1.20,y:0.90,label:"C4 · 중앙 2열", mx:0.30,my:0.60},
-  5:{x:3.10,y:2.20, label:"C5 · 복도 쪽",  mx:0.62,my:0.66},
-  6:{x:0.00,y:-1.50,label:"C6 · 입구 쪽",  mx:0.84,my:0.74},
+  1:{x:8.466938655420897, y:1.0469112458221683, label:"소파 1", mx:0.77,my:0.66},
+  2:{x:8.277391581217940, y:2.6896373844916814, label:"소파 2", mx:0.75,my:0.55},
+  3:{x:8.294669666639418, y:4.6156185919346530, label:"소파 3", mx:0.75,my:0.42},
+  4:{x:8.198006176707063, y:6.6322911388639920, label:"소파 4", mx:0.75,my:0.28},
+  5:{x:6.400106498963835, y:6.8202968391286385, label:"소파 5", mx:0.63,my:0.26},
 };
-const BOT_HOME = {mx:0.5, my:0.92};   // 터틀봇 출발 지점(맵상)
+const BOT_HOME = {mx:0.22, my:0.74};  // 터틀봇 출발 지점 (맵 원점 0,0)
 
 /* BGM 목록  ← src에 파일 경로를 넣으면 실제 재생. 비우면 자막만. */
 const BGMS = {
-  "love1":{title:"나는 너를", src:""},
-  "love2":{title:"첫사랑", src:""},
-  "love3":{title:"봄날의 고백", src:""},
+  "mai_piu":{title:"Mai più così lontano", src:"YTDown_YouTube_Mai-piu-cosi-lontano_Media_gBoCjVv5VD4_009_128k.mp3"},
 };
 
 /* =========================================================================
@@ -236,6 +264,7 @@ const BGMS = {
    ========================================================================= */
 let current = {seat:null, msg:"", bgm:null};
 let audio = null, typing=false;
+let _initDist = null;  // 첫 nav_feedback 시 기준 거리
 
 /* 작성 화면 채우기 */
 const seatSel=document.getElementById('seat');
@@ -257,14 +286,17 @@ document.getElementById('send').onclick=()=>{
   const bgmKey=bgmSel.value;
   current={seat,msg:text,bgm:BGMS[bgmKey]};
 
+  _initDist = null;
   goStep(2);
   document.getElementById('dseat').textContent=`#${seat} ${SEATS[seat].label}`;
   document.getElementById('bgmNow').textContent=current.bgm.title;
   document.getElementById('bgmNow2').textContent=current.bgm.title;
+  document.getElementById('etaVal').textContent='--';
+  document.getElementById('distVal').textContent='';
+  document.getElementById('bar').style.width='0';
   startBGM();
   flashLog(`출발 → <span>#${seat} ${SEATS[seat].label}</span> · BGM "${current.bgm.title}"`);
 
-  // 실제 ROS2라면: 여기서 노드로 목표좌표 publish 요청을 보냄
   if(window.__ws && window.__ws.readyState===1){
     window.__ws.send(JSON.stringify({type:"goto", seat, x:SEATS[seat].x, y:SEATS[seat].y}));
   }
@@ -272,28 +304,21 @@ document.getElementById('send').onclick=()=>{
   runDeliveryAnim(seat);
 };
 
-/* 배달 애니메이션(미니맵 위 봇 이동 + 진행바). 도착 전환은 ROS2 신호/테스트 버튼이 담당 */
+/* 배달 애니메이션 — 미니맵 봇 이동 표시. 진행바/ETA는 nav_feedback으로 실시간 업데이트 */
 function runDeliveryAnim(seat){
   const map=document.getElementById('map');
   map.querySelectorAll('.seatdot,.bot').forEach(e=>e.remove());
-  // 좌석 점
   Object.entries(SEATS).forEach(([n,s])=>{
     const d=document.createElement('div');d.className='seatdot'+(Number(n)===seat?' target':'');
     d.style.left=(s.mx*100)+'%';d.style.top=(s.my*100)+'%';d.textContent='#'+n;map.append(d);
   });
-  // 봇
   const bot=document.createElement('div');bot.className='bot';
   bot.style.left=(BOT_HOME.mx*100)+'%';bot.style.top=(BOT_HOME.my*100)+'%';map.append(bot);
-  // 경로선
   const t=SEATS[seat];const tr=document.getElementById('trail');
   tr.setAttribute('d',`M ${BOT_HOME.mx*560} ${BOT_HOME.my*300} L ${t.mx*560} ${t.my*300}`);
-  // 이동
   requestAnimationFrame(()=>{requestAnimationFrame(()=>{
     bot.style.left=(t.mx*100)+'%';bot.style.top=(t.my*100)+'%';
   });});
-  // 진행바(연출용 4초)
-  const bar=document.getElementById('bar');bar.style.width='0';
-  let p=0;const id=setInterval(()=>{p+=2.5;bar.style.width=Math.min(p,98)+'%';if(p>=98)clearInterval(id);},90);
 }
 
 /* =========================================================================
@@ -368,7 +393,27 @@ function connect(){
   ws.onopen=()=>{tag.textContent='● 터틀봇 연결됨';tag.className='on';flashLog('ROS2 브리지 연결됨');};
   ws.onclose=()=>{tag.textContent='○ 터틀봇 대기';tag.className='off';setTimeout(connect,2000);};
   ws.onerror=()=>ws.close();
-  ws.onmessage=(e)=>{try{const d=JSON.parse(e.data);if(d.type==='arrived')arrive();}catch(_){}};
+  ws.onmessage=(e)=>{
+    try{
+      const d=JSON.parse(e.data);
+      if(d.type==='arrived'){
+        arrive();
+      } else if(d.type==='nav_feedback'){
+        // 실제 ETA + 진행바 업데이트
+        if(_initDist===null) _initDist=d.distance_remaining;
+        const pct=_initDist>0?Math.min((1-d.distance_remaining/_initDist)*100,98):0;
+        document.getElementById('bar').style.width=pct+'%';
+        document.getElementById('etaVal').textContent=d.eta_sec>=0?d.eta_sec:'--';
+        document.getElementById('distVal').textContent=`(${d.distance_remaining}m)`;
+      } else if(d.type==='camera'){
+        const img=document.getElementById('camFeed');
+        const no=document.getElementById('camNo');
+        img.src='data:image/jpeg;base64,'+d.data;
+        img.style.display='block';
+        no.style.display='none';
+      }
+    }catch(_){}
+  };
 }
 connect();
 

@@ -1,0 +1,17 @@
+# ROS2 빌드 및 로그 폴더 (위치 불문 전부 제외)
+build/
+install/
+log/
+
+# 파이썬 캐시 및 빌드 잔재
+__pycache__/
+*.pyc
+*.egg-info/
+
+# 대용량 딥러닝 모델 가중치 파일 (용량 초과 방지)
+*.pt
+*.onnx
+
+# 에디터 및 정크 파일
+.vscode/
+.DS_Store
