@@ -26,8 +26,6 @@ RVIZ_CFG    = os.path.join(CUPID, 'config', 'nav2.rviz')
 
 
 def generate_launch_description():
-    rviz_args = ['-d', RVIZ_CFG] if os.path.exists(RVIZ_CFG) else []
-
     return LaunchDescription([
 
         # 맵 서버 — 고정 맵 로드
@@ -109,7 +107,7 @@ def generate_launch_description():
             package='rviz2',
             executable='rviz2',
             name='rviz2',
-            arguments=rviz_args,
+            arguments=['-d', RVIZ_CFG] if os.path.exists(RVIZ_CFG) else [],
             parameters=[{'use_sim_time': False}],
             output='screen',
         ),
