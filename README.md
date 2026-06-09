@@ -1,3 +1,26 @@
+## 실행 방법
+
+**터틀봇 터미널 (bringup + 카메라 통합)**
+```bash
+source ~/Workspace/ros2_ws/install/setup.bash
+ros2 launch my_robot_bringup camera_robot.launch.py
+```
+
+**노트북 터미널**
+```bash
+source /home/jshim/Desktop/workspace/turtlebot3_ws/install/setup.bash
+ros2 launch /home/jshim/Desktop/Cupid/cupid_demo.launch.py
+```
+
+**웹 브라우저**
+```
+http://localhost:8080/cupid42_demo.html
+```
+
+> RViz 실행 후 `2D Pose Estimate` 로 터틀봇 초기 위치 설정 필수
+
+---
+
 # 💌 사랑이 싹트는 42
 ### *터틀봇이 전하는, 차마 하지 못했던 말*
 
