@@ -19,7 +19,7 @@ from launch.actions import ExecuteProcess
 from launch_ros.actions import Node
 
 CUPID       = '/home/jshim/Desktop/Cupid'
-MAP_YAML    = os.path.join(CUPID, '2026_0602_1518_2F.yaml')
+MAP_YAML    = os.path.join(CUPID, 'map', '2026_0602_1518_2F.yaml')
 NAV2_PARAMS = os.path.join(CUPID, 'config', 'nav2_params.yaml')
 AMCL_PARAMS = os.path.join(CUPID, 'config', 'amcl_params.yaml')
 RVIZ_CFG    = os.path.join(CUPID, 'config', 'nav2.rviz')
