@@ -243,11 +243,11 @@
    [1] 좌석 ↔ 좌표  /  맵 표시용 픽셀 위치(0~1 비율)  ← 추후 실측값으로 교체
    ========================================================================= */
 const SEATS = {
-  1:{x:8.466938655420897, y:1.0469112458221683, label:"소파 1", mx:0.77,my:0.66},
-  2:{x:8.277391581217940, y:2.6896373844916814, label:"소파 2", mx:0.75,my:0.55},
-  3:{x:8.294669666639418, y:4.6156185919346530, label:"소파 3", mx:0.75,my:0.42},
-  4:{x:8.198006176707063, y:6.6322911388639920, label:"소파 4", mx:0.75,my:0.28},
-  5:{x:6.400106498963835, y:6.8202968391286385, label:"소파 5", mx:0.63,my:0.26},
+  1:{x:8.466938655420897, y:1.0469112458221683, label:"소파 1", mx:0.76,my:0.66},
+  2:{x:8.277391581217940, y:2.6896373844916814, label:"소파 2", mx:0.76,my:0.52},
+  3:{x:8.294669666639418, y:4.6156185919346530, label:"소파 3", mx:0.76,my:0.39},
+  4:{x:8.198006176707063, y:6.6322911388639920, label:"소파 4", mx:0.76,my:0.26},
+  5:{x:6.400106498963835, y:6.8202968391286385, label:"소파 5", mx:0.60,my:0.26},
 };
 const BOT_HOME = {mx:0.22, my:0.74};  // 터틀봇 출발 지점 (맵 원점 0,0)
 
@@ -261,9 +261,10 @@ const BGMS = {
    ========================================================================= */
 let current = {seat:null, msg:"", bgm:null};
 let audio = null, typing=false;
-let _initEta = null;   // 첫 feedback의 ETA (진행바 기준)
-let _smoothEta = null; // EMA 스무딩된 ETA
-let _cdTimer = null;   // 1초 카운트다운 타이머
+let _initEta = null;
+let _smoothEta = null;
+let _cdTimer = null;
+let _realFeedback = false; // 실제 Nav2 feedback 수신 여부
 
 /* 작성 화면 채우기 */
 const seatSel=document.getElementById('seat');
@@ -285,15 +286,13 @@ document.getElementById('send').onclick=()=>{
   const bgmKey=bgmSel.value;
   current={seat,msg:text,bgm:BGMS[bgmKey]};
 
-  _initEta = null; _smoothEta = null;
   clearInterval(_cdTimer);
+  _initEta=null; _smoothEta=null; _realFeedback=false;
   goStep(2);
   document.getElementById('dseat').textContent=`#${seat} ${SEATS[seat].label}`;
   document.getElementById('bgmNow').textContent=current.bgm.title;
   document.getElementById('bgmNow2').textContent=current.bgm.title;
-  document.getElementById('etaVal').textContent='--';
   document.getElementById('distVal').textContent='';
-  document.getElementById('bar').style.width='0';
   startBGM();
   flashLog(`출발 → <span>#${seat} ${SEATS[seat].label}</span> · BGM "${current.bgm.title}"`);
 
@@ -302,7 +301,25 @@ document.getElementById('send').onclick=()=>{
   }
 
   runDeliveryAnim(seat);
+
+  // Nav2 feedback 오기 전까지 거리 기반 예상 ETA로 애니메이션 즉시 시작
+  const estEta = Math.round(Math.sqrt(SEATS[seat].x**2 + SEATS[seat].y**2) / 0.20);
+  startCountdown(estEta);
 };
+
+function startCountdown(eta){
+  clearInterval(_cdTimer);
+  _initEta = eta; _smoothEta = eta;
+  document.getElementById('etaVal').textContent = Math.round(eta);
+  document.getElementById('bar').style.width = '0';
+  _cdTimer = setInterval(()=>{
+    if(_smoothEta > 0) _smoothEta = Math.max(0, _smoothEta - 1);
+    const ratio = _initEta > 0 ? Math.min(1 - _smoothEta/_initEta, 0.98) : 0;
+    document.getElementById('etaVal').textContent = Math.round(_smoothEta);
+    document.getElementById('bar').style.width = (ratio*100)+'%';
+    updateBotPos(ratio);
+  }, 1000);
+}
 
 /* 배달 애니메이션 — 봇 위치는 ETA 카운트다운과 동기화 */
 function runDeliveryAnim(seat){
@@ -316,7 +333,9 @@ function runDeliveryAnim(seat){
   bot.style.left=(BOT_HOME.mx*100)+'%';bot.style.top=(BOT_HOME.my*100)+'%';
   map.append(bot);
   const t=SEATS[seat];const tr=document.getElementById('trail');
-  tr.setAttribute('d',`M ${BOT_HOME.mx*560} ${BOT_HOME.my*300} L ${t.mx*560} ${t.my*300}`);
+  const mapEl=document.getElementById('map');
+  const mw=mapEl.clientWidth||560, mh=mapEl.clientHeight||300;
+  tr.setAttribute('d',`M ${BOT_HOME.mx*mw} ${BOT_HOME.my*mh} L ${t.mx*mw} ${t.my*mh}`);
   // 봇 위치는 ETA 카운트다운 타이머에서 업데이트
 }
 
@@ -411,21 +430,13 @@ function connect(){
       if(d.type==='arrived'){
         arrive();
       } else if(d.type==='nav_feedback'){
-        const newEta = d.eta_sec >= 0 ? d.eta_sec : 0;
-        if(_smoothEta === null){
-          // 첫 feedback: 기준값 설정 + 카운트다운 시작
-          _smoothEta = newEta;
-          _initEta = newEta;
-          clearInterval(_cdTimer);
-          _cdTimer = setInterval(()=>{
-            if(_smoothEta > 0){ _smoothEta = Math.max(0, _smoothEta - 1); }
-            const ratio = _initEta > 0 ? Math.min(1 - _smoothEta/_initEta, 0.98) : 0;
-            document.getElementById('etaVal').textContent = Math.round(_smoothEta);
-            document.getElementById('bar').style.width = (ratio*100)+'%';
-            updateBotPos(ratio);
-          }, 1000);
+        const newEta = d.eta_sec > 0 ? d.eta_sec : _smoothEta || 0;
+        if(!_realFeedback){
+          // 첫 실제 feedback: 추정 ETA → 실제 ETA로 교체
+          _realFeedback = true;
+          startCountdown(newEta);
         } else {
-          // 이후 feedback: EMA로 부드럽게 보정 (Nav2값과 카운트다운값 혼합)
+          // 이후 feedback: EMA로 부드럽게 보정
           _smoothEta = _smoothEta * 0.7 + newEta * 0.3;
         }
         document.getElementById('distVal').textContent=`(${d.distance_remaining}m)`;
