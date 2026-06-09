@@ -25,7 +25,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from nav2_msgs.action import NavigateToPose
 from geometry_msgs.msg import PoseStamped
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CompressedImage
 import websockets
 
 # 카메라 센서는 BEST_EFFORT QoS 사용 (기본 RELIABLE로 구독하면 프레임 못 받음)
@@ -49,12 +49,18 @@ _loop = None
 
 
 class CupidBridgeNode(Node):
-    # TurtleBot3 모델별 카메라 토픽 후보
-    CAM_TOPICS = [
-        '/camera/image_raw',          # waffle_pi (raspicam)
-        '/raspicam_node/image_raw',   # 일부 waffle_pi
-        '/camera/rgb/image_raw',      # waffle (RealSense)
-        '/image_raw',
+    # 압축 이미지 토픽 (빠름, 터틀봇 카메라가 여기 퍼블리시)
+    CAM_COMPRESSED_TOPICS = [
+        '/camera/image_raw/compressed',
+        '/raspicam_node/image/compressed',
+        '/camera/rgb/image_raw/compressed',
+        '/image_raw/compressed',
+    ]
+    # 비압축 fallback
+    CAM_RAW_TOPICS = [
+        '/camera/image_raw',
+        '/raspicam_node/image_raw',
+        '/camera/rgb/image_raw',
     ]
 
     def __init__(self):
@@ -62,11 +68,29 @@ class CupidBridgeNode(Node):
         self._client = ActionClient(self, NavigateToPose, '/navigate_to_pose')
         self._last_cam_t = 0.0
         self._cam_active = False
+        for topic in self.CAM_COMPRESSED_TOPICS:
+            self.create_subscription(CompressedImage, topic, self._on_compressed, CAM_QOS)
+            self.get_logger().info(f'Subscribing compressed: {topic}')
         if _CV2_OK:
-            for topic in self.CAM_TOPICS:
+            for topic in self.CAM_RAW_TOPICS:
                 self.create_subscription(Image, topic, self._on_image, CAM_QOS)
-                self.get_logger().info(f'Subscribing camera (BEST_EFFORT): {topic}')
         self.get_logger().info('Cupid bridge node started')
+
+    def _on_compressed(self, msg):
+        now = time.time()
+        if now - self._last_cam_t < 0.1:
+            return
+        self._last_cam_t = now
+        if not self._cam_active:
+            self._cam_active = True
+            self.get_logger().info(f'Compressed camera OK: format={msg.format}')
+        try:
+            b64 = base64.b64encode(bytes(msg.data)).decode()
+            if _loop:
+                asyncio.run_coroutine_threadsafe(
+                    _broadcast({'type': 'camera', 'data': b64}), _loop)
+        except Exception as e:
+            self.get_logger().warn(f'Compressed camera error: {e}')
 
     def _on_image(self, msg):
         now = time.time()
