@@ -8,12 +8,24 @@
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Gowun+Dodum&display=swap');
 
   :root{
-    --bg:#0d0b14; --crt:#100c1a; --line:#2a2138;
-    --ink:#e8d8f0; --dim:#7a6b8f;
-    --pink:#ff6fae; --pink-soft:#ffa6cf; --mint:#7af0c8; --gold:#ffd56b;
-    --glow:rgba(255,111,174,.5);
     --mono:'DM Mono',ui-monospace,Menlo,Consolas,monospace;
     --kr:'Gowun Dodum','DM Mono',sans-serif;
+  }
+  /* === 컨셉 테마 (액센트 색만 컨셉별로 교체) === */
+  body[data-theme="love"]{
+    --bg:#0d0b14; --crt:#100c1a; --line:#2a2138; --ink:#e8d8f0; --dim:#7a6b8f;
+    --pink:#ff6fae; --pink-soft:#ffa6cf; --mint:#7af0c8; --gold:#ffd56b;
+    --glow:rgba(255,111,174,.5);
+  }
+  body[data-theme="coffee"]{
+    --bg:#140f0a; --crt:#17110b; --line:#33271c; --ink:#efe2d2; --dim:#9b836a;
+    --pink:#c98a4b; --pink-soft:#e6b787; --mint:#9ed0a8; --gold:#f0c067;
+    --glow:rgba(201,138,75,.5);
+  }
+  body[data-theme="smoke"]{
+    --bg:#0b0f12; --crt:#0d1216; --line:#22303a; --ink:#dbe6ec; --dim:#6b8190;
+    --pink:#62b6c9; --pink-soft:#9ad8e6; --mint:#a9d6c0; --gold:#d6cf8f;
+    --glow:rgba(98,182,201,.5);
   }
   *{box-sizing:border-box;}
   html,body{margin:0;height:100%;}
@@ -52,6 +64,25 @@
   .screen{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:42px;
     opacity:0;visibility:hidden;transition:opacity .5s ease;}
   .screen.show{opacity:1;visibility:visible;}
+
+  /* ===== STEP 0 컨셉 선택 ===== */
+  #pick{flex-direction:column;gap:30px;}
+  #pick .pick-title{font-family:var(--kr);font-size:22px;color:var(--ink);letter-spacing:.04em;text-align:center;}
+  #pick .pick-title small{display:block;font-size:13px;color:var(--dim);margin-top:10px;letter-spacing:.1em;}
+  .concepts{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;}
+  .concept{width:230px;border:1px solid var(--line);border-radius:18px;padding:30px 26px;cursor:pointer;
+    background:linear-gradient(160deg,rgba(255,255,255,.03),rgba(0,0,0,.15));text-align:center;
+    transition:.2s;position:relative;overflow:hidden;}
+  .concept:hover{transform:translateY(-5px);border-color:var(--accent);box-shadow:0 20px 50px rgba(0,0,0,.5);}
+  .concept .emoji{font-size:46px;line-height:1;filter:drop-shadow(0 0 14px var(--accent-glow));}
+  .concept h3{font-family:var(--kr);font-size:19px;margin:18px 0 8px;color:var(--accent-soft);}
+  .concept p{font-family:var(--kr);font-size:12px;color:var(--dim);line-height:1.6;margin:0 0 14px;min-height:3.2em;}
+  .concept .song{font-family:var(--mono);font-size:10px;color:var(--dim);border-top:1px dashed var(--line);
+    padding-top:12px;letter-spacing:.03em;}
+  .concept .song b{color:var(--accent);font-weight:400;}
+  .concept.c-love{--accent:#ff6fae;--accent-soft:#ffa6cf;--accent-glow:rgba(255,111,174,.5);}
+  .concept.c-coffee{--accent:#c98a4b;--accent-soft:#e6b787;--accent-glow:rgba(201,138,75,.5);}
+  .concept.c-smoke{--accent:#62b6c9;--accent-soft:#9ad8e6;--accent-glow:rgba(98,182,201,.5);}
 
   /* ===== STEP 1 작성 ===== */
   #compose .card{width:min(560px,94%);background:linear-gradient(160deg,#171022,#120c1d);
@@ -155,12 +186,12 @@
   .eta-bar .eta-unit{font-size:11px;}
 </style>
 </head>
-<body>
+<body data-theme="love">
 
 <header>
-  <span class="heart">♥</span>
-  <h1>사랑이 싹트는 42</h1>
-  <span class="sub">터틀봇이 전하는, 차마 하지 못했던 말</span>
+  <span class="heart" id="hIcon">♥</span>
+  <h1 id="hTitle">사랑이 싹트는 42</h1>
+  <span class="sub" id="hSub">터틀봇이 전하는, 차마 하지 못했던 말</span>
   <div class="steps">
     <div class="s active" data-s="1"><b>1</b>작성</div><span class="arr">→</span>
     <div class="s" data-s="2"><b>2</b>배달 중</div><span class="arr">→</span>
@@ -170,20 +201,29 @@
 </header>
 
 <main>
+  <!-- STEP 0 : 컨셉 선택 -->
+  <section class="screen show" id="pick">
+    <div class="pick-title">어떤 마음을 전할까요?<small>SELECT A CONCEPT · 컨셉을 고르면 분위기와 음악이 함께 바뀝니다</small></div>
+    <div class="concepts" id="conceptList"></div>
+  </section>
+
   <!-- STEP 1 -->
-  <section class="screen show" id="compose">
+  <section class="screen" id="compose">
     <div class="card">
-      <p class="title">✉ 익명으로 마음을 전하세요</p>
+      <p class="title" id="composeTitle">✉ 익명으로 마음을 전하세요</p>
       <label>받는 사람 좌석</label>
       <select id="seat"></select>
       <div class="gap"></div>
-      <label>전하고 싶은 말</label>
+      <label id="msgLabel">전하고 싶은 말</label>
       <textarea id="msg" placeholder="오늘 옆에 앉아서 공부했는데, 덕분에 집중 잘 됐어요. 고마워요…"></textarea>
-      <div class="gap"></div>
-      <label>함께 보낼 BGM</label>
-      <select id="bgmSel"></select>
-      <p class="hint">＊ 보낸 사람은 <b style="color:var(--pink-soft)">익명</b>으로 전달돼요. 터틀봇이 직접 좌석까지 배달합니다.</p>
+      <p class="hint" id="composeHint">＊ 보낸 사람은 <b style="color:var(--pink-soft)">익명</b>으로 전달돼요. 터틀봇이 직접 좌석까지 배달합니다.</p>
+      <div class="bgm" style="margin-top:14px;font-size:12px"><span class="note">🎵</span>
+        <span style="color:var(--dim)">함께 재생될 음악 :</span>&nbsp;<b id="composeSong" style="color:var(--gold);font-weight:400"></b></div>
       <button class="btn-send" id="send">♥ 터틀봇으로 보내기</button>
+      <div style="text-align:center;margin-top:14px">
+        <button id="backToPick" style="background:none;border:none;color:var(--dim);font-family:var(--mono);
+          font-size:11px;letter-spacing:.08em;cursor:pointer">← 컨셉 다시 고르기</button>
+      </div>
     </div>
   </section>
 
@@ -224,7 +264,7 @@
       <div class="bar"><i class="dot1"></i><i class="dot2"></i><i class="dot3"></i>
         <span id="barpath">~/cluster/mailbox — delivered by turtlebot</span></div>
       <div class="inner">
-        <div class="ribbon">♥ 새로운 메시지가 도착했습니다 ♥</div>
+        <div class="ribbon" id="ribbonText">♥ 새로운 메시지가 도착했습니다 ♥</div>
         <div class="meta"><span>보낸 사람 : <b>??? (익명)</b></span>
           <span>받은 시각 : <b id="ts"></b></span></div>
         <div class="message" id="message"></div>
@@ -251,10 +291,68 @@ const SEATS = {
 };
 const BOT_HOME = {mx:0.22, my:0.74};  // 터틀봇 출발 지점 (맵 원점 0,0)
 
-/* BGM 목록  ← src에 파일 경로를 넣으면 실제 재생. 비우면 자막만. */
-const BGMS = {
-  "mai_piu":{title:"Mai più così lontano", src:"YTDown_YouTube_Mai-piu-cosi-lontano_Media_gBoCjVv5VD4_009_128k.mp3"},
+/* =========================================================================
+   [1.5] 컨셉(테마) 정의 — 컨셉마다 음악 + 분위기/문구
+   ＊ 음악 파일은 song/ 폴더에 있고, web_bridge.py HTTP 서버가 서빙합니다.
+   ＊ 담배타임(smoke)은 songs 배열에서 보낼 때마다 랜덤으로 1곡 선택됩니다.
+   ========================================================================= */
+const THEMES = {
+  love: {
+    theme:"love", icon:"♥", title:"사랑이 싹트는 42",
+    sub:"터틀봇이 전하는, 차마 하지 못했던 말",
+    emoji:"💌", name:"사랑",
+    desc:"차마 전하지 못한 마음을, 터틀봇이 대신 배달해요.",
+    composeTitle:"✉ 익명으로 마음을 전하세요",
+    msgLabel:"전하고 싶은 말",
+    placeholder:"오늘 옆에 앉아서 공부했는데, 덕분에 집중 잘 됐어요. 고마워요…",
+    hint:'＊ 보낸 사람은 <b>익명</b>으로 전달돼요. 터틀봇이 직접 좌석까지 배달합니다.',
+    sendLabel:"♥ 터틀봇으로 보내기",
+    ribbon:"♥ 새로운 메시지가 도착했습니다 ♥",
+    particles:["♥","♡","💕","💗"],
+    songs:[ {title:"Mai più così lontano", src:"song/Mai-piu-cosi-lontano.mp3"} ],
+  },
+  coffee: {
+    theme:"coffee", icon:"☕", title:"커피 한 잔 할래요?",
+    sub:"터틀봇이 건네는, 따뜻한 커피 한 잔의 권유",
+    emoji:"☕", name:"커피",
+    desc:"같이 쉬어가요. 커피 한 잔의 여유를 배달해요.",
+    composeTitle:"☕ 커피 한 잔 건네기",
+    msgLabel:"같이 전할 한 마디",
+    placeholder:"5분만 쉬었다 해요. 제가 커피 살게요 ☕",
+    hint:'＊ 보낸 사람은 <b>익명</b>으로 전달돼요. 터틀봇이 직접 좌석까지 배달합니다.',
+    sendLabel:"☕ 터틀봇으로 보내기",
+    ribbon:"☕ 커피 한 잔이 도착했습니다 ☕",
+    particles:["☕","♨","🫖","☕"],
+    songs:[ {title:"Coffee With Me — Paul Kim", src:"song/Coffee_With_Me.mp3"} ],
+  },
+  smoke: {
+    theme:"smoke", icon:"🚬", title:"담배 한 대 어때요?",
+    sub:"터틀봇이 부르는, 잠깐의 쉼표",
+    emoji:"🚬", name:"담배타임",
+    desc:"머리 식히러 나가요. 잠깐의 쉼표를 배달해요.",
+    composeTitle:"🚬 담배타임 부르기",
+    msgLabel:"같이 전할 한 마디",
+    placeholder:"머리도 식힐 겸 한 대 하러 나갈래요?",
+    hint:'＊ 보낸 사람은 <b>익명</b>으로 전달돼요. 터틀봇이 직접 좌석까지 배달합니다.',
+    sendLabel:"🚬 터틀봇으로 보내기",
+    ribbon:"🚬 담배타임 호출이 도착했습니다 🚬",
+    particles:["💨","🚬","💨","☁"],
+    // 두 곡 중 보낼 때마다 랜덤으로 하나
+    songs:[
+      {title:"Big Sleep", src:"song/Big_Sleep.mp3"},
+      {title:"Gangsta's Paradise — Coolio", src:"song/Gangsta's_Paradise.mp3"},
+    ],
+  },
 };
+
+let activeTheme = THEMES.love;   // 현재 선택된 컨셉
+
+/* 컨셉의 songs 중 하나를 고름(담배는 랜덤, 나머지는 첫 곡) */
+function pickSong(t){
+  const list = t.songs || [];
+  if(list.length === 0) return {title:"(음악 없음)", src:""};
+  return list[Math.floor(Math.random()*list.length)];
+}
 
 /* =========================================================================
    [2] 상태
@@ -266,15 +364,53 @@ let _smoothEta = null;
 let _cdTimer = null;
 let _realFeedback = false; // 실제 Nav2 feedback 수신 여부
 
-/* 작성 화면 채우기 */
+/* 작성 화면 좌석 채우기 */
 const seatSel=document.getElementById('seat');
 Object.entries(SEATS).forEach(([n,s])=>{
   const o=document.createElement('option');o.value=n;o.textContent=`#${n} · ${s.label}`;seatSel.append(o);
 });
-const bgmSel=document.getElementById('bgmSel');
-Object.entries(BGMS).forEach(([k,b])=>{
-  const o=document.createElement('option');o.value=k;o.textContent=`🎵 ${b.title}`;bgmSel.append(o);
+
+/* === STEP 0 : 컨셉 카드 렌더링 & 선택 === */
+const conceptList=document.getElementById('conceptList');
+Object.values(THEMES).forEach(t=>{
+  const card=document.createElement('div');
+  card.className=`concept c-${t.theme}`;
+  const songLabel = t.songs.length>1
+    ? `${t.songs.map(s=>s.title).join(' / ')} <span style="opacity:.7">(랜덤)</span>`
+    : t.songs[0].title;
+  card.innerHTML=`
+    <div class="emoji">${t.emoji}</div>
+    <h3>${t.name}</h3>
+    <p>${t.desc}</p>
+    <div class="song">🎵 <b>${songLabel}</b></div>`;
+  card.onclick=()=>selectConcept(t.theme);
+  conceptList.append(card);
 });
+
+function selectConcept(key){
+  activeTheme = THEMES[key];
+  applyTheme(activeTheme);
+  goStep(1);
+}
+
+function applyTheme(t){
+  document.body.dataset.theme = t.theme;
+  document.getElementById('hIcon').textContent = t.icon;
+  document.getElementById('hTitle').textContent = t.title;
+  document.getElementById('hSub').textContent = t.sub;
+  document.getElementById('composeTitle').textContent = t.composeTitle;
+  document.getElementById('msgLabel').textContent = t.msgLabel;
+  document.getElementById('msg').placeholder = t.placeholder;
+  document.getElementById('composeHint').innerHTML =
+    t.hint.replace('<b>','<b style="color:var(--pink-soft)">');
+  document.getElementById('send').textContent = t.sendLabel;
+  document.getElementById('ribbonText').textContent = t.ribbon;
+  // 작성 화면 음악 표시: 담배는 "두 곡 중 랜덤"으로 안내
+  document.getElementById('composeSong').textContent =
+    t.songs.length>1 ? `${t.songs.map(s=>s.title).join(' / ')} 중 랜덤` : t.songs[0].title;
+}
+
+document.getElementById('backToPick').onclick=()=>{ stopBGM(); goStep(0); };
 
 /* =========================================================================
    [3] STEP 1 → 2 : 보내기 = 터틀봇 출발 + BGM 시작 + 배달중 화면
@@ -283,8 +419,7 @@ document.getElementById('send').onclick=()=>{
   const text=document.getElementById('msg').value.trim();
   if(!text){alert("메시지를 입력해 주세요");return;}
   const seat=Number(seatSel.value);
-  const bgmKey=bgmSel.value;
-  current={seat,msg:text,bgm:BGMS[bgmKey]};
+  current={seat,msg:text,bgm:pickSong(activeTheme)};
 
   clearInterval(_cdTimer);
   _initEta=null; _smoothEta=null; _realFeedback=false;
@@ -294,7 +429,7 @@ document.getElementById('send').onclick=()=>{
   document.getElementById('bgmNow2').textContent=current.bgm.title;
   document.getElementById('distVal').textContent='';
   startBGM();
-  flashLog(`출발 → <span>#${seat} ${SEATS[seat].label}</span> · BGM "${current.bgm.title}"`);
+  flashLog(`[${activeTheme.name}] 출발 → <span>#${seat} ${SEATS[seat].label}</span> · BGM "${current.bgm.title}"`);
 
   if(window.__ws && window.__ws.readyState===1){
     window.__ws.send(JSON.stringify({type:"goto", seat, x:SEATS[seat].x, y:SEATS[seat].y}));
@@ -382,8 +517,8 @@ async function typeText(text,speed=130){
    [5] 단계 전환 / BGM / 하트
    ========================================================================= */
 function goStep(n){
-  ['compose','deliver','receive'].forEach((id,i)=>
-    document.getElementById(id).classList.toggle('show',i===n-1));
+  ['pick','compose','deliver','receive'].forEach((id,i)=>
+    document.getElementById(id).classList.toggle('show',i===n));
   document.querySelectorAll('.steps .s').forEach(s=>
     s.classList.toggle('active',Number(s.dataset.s)===n));
 }
@@ -393,7 +528,7 @@ function startBGM(){
 }
 function stopBGM(){if(audio){audio.pause();audio=null;}}
 function burstHearts(){
-  const m=document.querySelector('main');const hs=['♥','♡','💕','💗'];
+  const m=document.querySelector('main');const hs=activeTheme.particles;
   for(let i=0;i<16;i++){const h=document.createElement('div');h.className='heartfx';
     h.textContent=hs[i%hs.length];h.style.left=Math.random()*100+'%';
     h.style.color=Math.random()>.5?'var(--pink)':'var(--pink-soft)';
@@ -408,7 +543,7 @@ document.getElementById('again').onclick=()=>{
   stopBGM();
   clearInterval(_cdTimer);
   _initEta=null; _smoothEta=null;
-  goStep(1);
+  goStep(0);
   document.getElementById('message').innerHTML='';
   document.getElementById('msg').value='';
 };
@@ -451,6 +586,7 @@ function connect(){
   };
 }
 connect();
+applyTheme(activeTheme);   // 기본 테마(사랑) 미리 적용
 
 /* ---------- 유틸 ---------- */
 function stamp(){const d=new Date();const p=x=>String(x).padStart(2,'0');
